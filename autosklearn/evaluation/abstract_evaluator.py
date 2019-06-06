@@ -103,6 +103,7 @@ class AbstractEvaluator(object):
                  include=None,
                  exclude=None,
                  disable_file_output=False,
+                 std_scores=False,
                  init_params=None):
 
         self.starttime = time.time()
@@ -127,6 +128,7 @@ class AbstractEvaluator(object):
         self.output_y_hat_optimization = output_y_hat_optimization
         self.all_scoring_functions = all_scoring_functions
         self.disable_file_output = disable_file_output
+        self.std_scores = std_scores
 
         if self.task_type in REGRESSION_TASKS:
             if not isinstance(self.configuration, Configuration):

@@ -52,7 +52,8 @@ class ExecuteTaFuncWithQueue(AbstractTAFunc):
                  logger, initial_num_run=1, stats=None, runhistory=None,
                  run_obj='quality', par_factor=1, all_scoring_functions=False,
                  output_y_hat_optimization=True, include=None, exclude=None,
-                 memory_limit=None, disable_file_output=False, init_params=None,
+                 memory_limit=None, disable_file_output=False,
+                 std_scores=False, init_params=None,
                  **resampling_strategy_args):
 
         if resampling_strategy == 'holdout':
@@ -103,6 +104,7 @@ class ExecuteTaFuncWithQueue(AbstractTAFunc):
         self.include = include
         self.exclude = exclude
         self.disable_file_output = disable_file_output
+        self.std_scores = std_scores
         self.init_params = init_params
         self.logger = logger
 
@@ -199,6 +201,7 @@ class ExecuteTaFuncWithQueue(AbstractTAFunc):
             include=self.include,
             exclude=self.exclude,
             disable_file_output=self.disable_file_output,
+            std_scores=self.std_scores,
             instance=instance,
             init_params=init_params,
         )

@@ -82,6 +82,7 @@ class AutoML(BaseEstimator):
                  shared_mode=False,
                  precision=32,
                  disable_evaluator_output=False,
+                 std_scores=False,
                  get_smac_object_callback=None,
                  smac_scenario_args=None,
                  logging_config=None,
@@ -112,6 +113,7 @@ class AutoML(BaseEstimator):
         self._shared_mode = shared_mode
         self.precision = precision
         self._disable_evaluator_output = disable_evaluator_output
+        self._std_scores = std_scores
         self._get_smac_object_callback = get_smac_object_callback
         self._smac_scenario_args = smac_scenario_args
         self.logging_config = logging_config
@@ -482,6 +484,7 @@ class AutoML(BaseEstimator):
                 include_preprocessors=self._include_preprocessors,
                 exclude_preprocessors=self._exclude_preprocessors,
                 disable_file_output=self._disable_evaluator_output,
+                std_scores=self._std_scores,
                 get_smac_object_callback=self._get_smac_object_callback,
                 smac_scenario_args=self._smac_scenario_args,
             )
@@ -725,9 +728,6 @@ class AutoML(BaseEstimator):
         #                  basis
         # splitX_train_score - auto-sklearn does not compute train scores, add
         #                      flag to compute the train scores
-        # mean_train_score - auto-sklearn does not store the train scores
-        # std_train_score - auto-sklearn does not store the train scores
-        # std_fit_time - auto-sklearn does not store the fit times per split
         # mean_score_time - auto-sklearn does not store the score time
         # std_score_time - auto-sklearn does not store the score time
         # TODO: add those arguments
@@ -747,8 +747,11 @@ class AutoML(BaseEstimator):
             masks[name] = []
             hp_names.append(name)
 
+        mean_train_score = []
         mean_test_score = []
         mean_fit_time = []
+        splitX_train_score = []
+        splitX_train_std = []
         params = []
         status = []
         for run_key in self.runhistory_.data:
@@ -775,6 +778,23 @@ class AutoML(BaseEstimator):
             else:
                 raise NotImplementedError(s)
 
+            # train_loss only if successful
+            # TODO: train_loss by kfolds
+            if s == StatusType.SUCCESS:
+                mean_train_score.append(
+                    self._metric._optimum -
+                    run_value.additional_info['train_loss'])
+                if self._std_scores:
+                    splitX_train_score.append(
+                        run_value.additional_info['splitX_train_score'])
+                    splitX_train_std.append(
+                        run_value.additional_info['splitX_train_std'])
+            else:
+                mean_train_score.append(np.NaN)
+                if self._std_scores:
+                    splitX_train_score.append(np.NaN)
+                    splitX_train_std.append(np.NaN)
+
             for hp_name in hp_names:
                 if hp_name in param_dict:
                     hp_value = param_dict[hp_name]
@@ -786,12 +806,50 @@ class AutoML(BaseEstimator):
                 parameter_dictionaries[hp_name].append(hp_value)
                 masks[hp_name].append(mask_value)
 
+        results['mean_train_score'] = np.array(mean_train_score)
         results['mean_test_score'] = np.array(mean_test_score)
         results['mean_fit_time'] = np.array(mean_fit_time)
+        if self._std_scores:
+            for i, row in enumerate(splitX_train_score):
+                if np.isnan(np.sum(row)):  # test for np.NaN in row
+                    if y_len:
+                        splitX_train_score[i] = np.repeat(
+                            np.array(np.NaN), y_len)
+                        splitX_train_std[i] = np.repeat(
+                            np.array(np.NaN), y_len)
+                else:
+                    y_len = len(row)
+            if not y_len:
+                raise ValueError('Cannot compute std on scores:'
+                                 ' ALL models failed.')
+            results['splitX_train_score'] = np.array(splitX_train_score)
+            results['splitX_train_std'] = np.array(splitX_train_std)
+            results['std_train_score'] = results['splitX_train_std'].max(axis=1)
+        else:
+            results['std_train_score'] = np.nanstd(results['mean_train_score'])
+        results['std_test_score'] = np.nanstd(results['mean_test_score'])
+        results['std_fit_time'] = results['mean_fit_time'].std()
+
         results['params'] = params
         results['rank_test_scores'] = scipy.stats.rankdata(1 - results['mean_test_score'],
                                                            method='min')
         results['status'] = status
+
+        idx_success = np.where(np.array(results['status']) == 'Success')
+        if not self._metric._optimum:
+            idx_best_train = np.argmin(results['mean_train_score'][idx_success])
+            idx_best_run = np.argmin(results['mean_test_score'][idx_success])
+        else:
+            idx_best_train = np.argmax(results['mean_train_score'][idx_success])
+            idx_best_run = np.argmax(results['mean_test_score'][idx_success])
+        results['best_train_idx'] = idx_best_train
+        results['best_test_idx'] = idx_best_run
+        best_train = results['mean_train_score'][idx_success][idx_best_train]
+        results['best_train_score'] = best_train
+        if self._std_scores:
+            best_tstd = results['std_train_score'][idx_success][idx_best_train]
+            results['best_train_std'] = best_tstd
+
 
         for hp_name in hp_names:
             masked_array = ma.MaskedArray(parameter_dictionaries[hp_name],
@@ -808,11 +866,25 @@ class AutoML(BaseEstimator):
         sio.write('  Metric: %s\n' % self._metric)
         idx_success = np.where(np.array(cv_results['status']) == 'Success')
         if not self._metric._optimum:
+            idx_best_train = np.argmin(cv_results['mean_train_score'][idx_success])
             idx_best_run = np.argmin(cv_results['mean_test_score'][idx_success])
         else:
+            idx_best_train = np.argmax(cv_results['mean_train_score'][idx_success])
             idx_best_run = np.argmax(cv_results['mean_test_score'][idx_success])
+
+        best_train = cv_results['mean_train_score'][idx_success][idx_best_train]
+        if self._std_scores:
+            std_train = cv_results['std_train_score']
+            best_std = std_train[idx_success][idx_best_train]
+            sio.write('  Best train score: %f (+/- %.2f)\n' % (
+                best_train, best_std))
+        else:
+            sio.write('  Best train score: %f\n' % best_train)
+
         best_score = cv_results['mean_test_score'][idx_success][idx_best_run]
-        sio.write('  Best validation score: %f\n' % best_score)
+        std_score = cv_results['std_test_score']
+        sio.write('  Best validation score: %f (+/- %f)\n' % (
+            best_score, std_score))
         num_runs = len(cv_results['status'])
         sio.write('  Number of target algorithm runs: %d\n' % num_runs)
         num_success = sum([s == 'Success' for s in cv_results['status']])

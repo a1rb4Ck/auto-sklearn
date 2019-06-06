@@ -40,6 +40,7 @@ class AutoSklearnEstimator(BaseEstimator):
         shared_mode=False,
         n_jobs: Optional[int] = None,
         disable_evaluator_output=False,
+        std_scores=False,
         get_smac_object_callback=None,
         smac_scenario_args=None,
         logging_config=None,
@@ -187,6 +188,12 @@ class AutoSklearnEstimator(BaseEstimator):
               an ensemble.
             * ``'model'`` : do not save any model files
 
+        std_scores: bool, optional (False)
+            If True, record and compute the standard deviation on split fit:
+            additional_info['splitX_train_score'] & ['splitX_train_std'],
+            additional_info['splitX_val_score'] & ['splitX_val_std'],
+            additional_info['splitX_test_score'] & ['splitX_test_std']
+
         smac_scenario_args : dict, optional (None)
             Additional arguments inserted into the scenario of SMAC. See the
             `SMAC documentation <https://automl.github.io/SMAC3/stable/options.html?highlight=scenario#scenario>`_
@@ -244,6 +251,7 @@ class AutoSklearnEstimator(BaseEstimator):
         self.shared_mode = shared_mode
         self.n_jobs = n_jobs
         self.disable_evaluator_output = disable_evaluator_output
+        self.std_scores = std_scores
         self.get_smac_object_callback = get_smac_object_callback
         self.smac_scenario_args = smac_scenario_args
         self.logging_config = logging_config
@@ -304,6 +312,7 @@ class AutoSklearnEstimator(BaseEstimator):
             shared_mode=shared_mode,
             get_smac_object_callback=self.get_smac_object_callback,
             disable_evaluator_output=self.disable_evaluator_output,
+            std_scores=self.std_scores,
             smac_scenario_args=smac_scenario_args,
             logging_config=self.logging_config,
             metadata_directory=self.metadata_directory,

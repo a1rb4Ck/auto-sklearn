@@ -68,6 +68,7 @@ class TrainEvaluator(AbstractEvaluator):
                  include=None,
                  exclude=None,
                  disable_file_output=False,
+                 std_scores=False,
                  init_params=None):
         super().__init__(
             backend=backend,
@@ -82,6 +83,7 @@ class TrainEvaluator(AbstractEvaluator):
             include=include,
             exclude=exclude,
             disable_file_output=disable_file_output,
+            std_scores=std_scores,
             init_params=init_params,
         )
 
@@ -201,7 +203,18 @@ class TrainEvaluator(AbstractEvaluator):
                     # to be np.NaN as well
                     np.isfinite(Y_train_pred[:, 0])
                 ]
-
+            if self.std_scores:
+                Y_train_pred_std = np.nanstd(Y_train_pred_full, axis=0)
+                if self.cv_folds == 1:
+                    Y_train_pred_std = Y_train_pred_std[
+                        np.isfinite(Y_train_pred_std[:, 0])]
+                additional_run_info = {}
+                additional_run_info['splitX_train_score'] = [
+                    row[i] for i, row in zip(
+                        Y_train_pred.argmax(axis=1), Y_train_pred)]
+                additional_run_info['splitX_train_std'] = [
+                    row[i] for i, row in zip(
+                        Y_train_pred.argmax(axis=1), Y_train_pred_std)]
 
             Y_optimization_pred = np.concatenate(
                 [Y_optimization_pred[i] for i in range(self.cv_folds)
@@ -216,6 +229,14 @@ class TrainEvaluator(AbstractEvaluator):
                 # Average the predictions of several models
                 if len(Y_valid_pred.shape) == 3:
                     Y_valid_pred = np.nanmean(Y_valid_pred, axis=0)
+                if self.std_scores:
+                    Y_val_pred_std = np.nanstd(Y_valid_pred, axis=0)
+                    additional_run_info['splitX_val_score'] = [
+                        row[i] for i, row in zip(
+                                Y_val_pred.argmax(axis=1), Y_val_pred)]
+                    additional_run_info['splitX_val_std'] = [
+                        row[i] for i, row in zip(
+                            Y_val_pred_std.argmax(axis=1), Y_val_pred)]
             else:
                 Y_valid_pred = None
 
@@ -226,6 +247,14 @@ class TrainEvaluator(AbstractEvaluator):
                 # Average the predictions of several models
                 if len(Y_test_pred.shape) == 3:
                     Y_test_pred = np.nanmean(Y_test_pred, axis=0)
+                if self.std_scores:
+                    Y_test_pred_std = np.nanstd(Y_test_pred, axis=0)
+                    additional_run_info['splitX_test_score'] = [
+                        row[i] for i, row in zip(
+                            Y_test_pred.argmax(axis=1), Y_test_pred)]
+                    additional_run_info['splitX_test_std'] = [
+                        row[i] for i, row in zip(
+                            Y_test_pred_std.argmax(axis=1), Y_test_pred_std)]
             else:
                 Y_test_pred = None
 
@@ -623,6 +652,7 @@ def eval_holdout(
         include,
         exclude,
         disable_file_output,
+        std_scores=False,
         init_params=None,
         iterative=False,
 ):
@@ -643,6 +673,7 @@ def eval_holdout(
         include=include,
         exclude=exclude,
         disable_file_output=disable_file_output,
+        std_scores=std_scores,
         init_params=init_params
     )
     evaluator.fit_predict_and_loss(iterative=iterative)
@@ -663,6 +694,7 @@ def eval_iterative_holdout(
         include,
         exclude,
         disable_file_output,
+        std_scores=False,
         init_params=None,
 ):
     return eval_holdout(
@@ -680,6 +712,7 @@ def eval_iterative_holdout(
         exclude=exclude,
         instance=instance,
         disable_file_output=disable_file_output,
+        std_scores=std_scores,
         iterative=True,
         init_params=init_params
     )
@@ -700,6 +733,7 @@ def eval_partial_cv(
         include,
         exclude,
         disable_file_output,
+        std_scores=False,
         init_params=None,
         iterative=False
 ):
@@ -721,6 +755,7 @@ def eval_partial_cv(
         output_y_hat_optimization=False,
         include=include,
         exclude=exclude,
+        std_scores=std_scores,
         disable_file_output=disable_file_output,
         init_params=init_params,
     )
@@ -743,6 +778,7 @@ def eval_partial_cv_iterative(
         include,
         exclude,
         disable_file_output,
+        std_scores=False,
         init_params=None,
 ):
     return eval_partial_cv(
@@ -760,6 +796,7 @@ def eval_partial_cv_iterative(
         include=include,
         exclude=exclude,
         disable_file_output=disable_file_output,
+        std_scores=std_scores,
         iterative=True,
         init_params=init_params,
     )
@@ -781,7 +818,8 @@ def eval_cv(
         include,
         exclude,
         disable_file_output,
-        init_params=None,
+        std_scores=False,
+        init_params=None
 ):
     instance = json.loads(instance) if instance is not None else {}
     subsample = instance.get('subsample')
@@ -800,6 +838,7 @@ def eval_cv(
         include=include,
         exclude=exclude,
         disable_file_output=disable_file_output,
+        std_scores=std_scores,
         init_params=init_params,
     )
 
